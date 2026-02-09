@@ -40,16 +40,22 @@ const sheets = google.sheets({ version: "v4", auth });
 /*********************************
  * FETCH CHL GAMES
  *********************************/
-async function fetchGames(date) {
-  const url = `https://chl.ca/api/v1/games?leagueId=3&date=${date}`;
-  const res = await fetch(url);
+async function fetchWHLGames(date) {
+  const url = `https://cluster.leaguestat.com/feed/?feed=modulekit&view=schedule&key=public&league_id=1&season_id=74&date=${date}`;
 
-  if (!res.ok) {
-    throw new Error(`CHL API error ${res.status}`);
+  const res = await fetch(url);
+  const text = await res.text();
+
+  if (!text.startsWith("{")) {
+    console.error("❌ RAW RESPONSE:", text.slice(0, 200));
+    throw new Error("Non-JSON response from WHL");
   }
 
-  const json = await res.json();
-  return json.data || [];
+  const json = JSON.parse(text);
+
+  if (!json?.sitekit?.games) return [];
+
+  return json.sitekit.games;
 }
 
 /*********************************
