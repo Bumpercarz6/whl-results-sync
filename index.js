@@ -41,7 +41,7 @@ const sheets = google.sheets({ version: "v4", auth });
  * FETCH CHL GAMES
  *********************************/
 async function fetchGames(date) {
-  const url = `https://api.chl.ca/v1/games?league=${LEAGUE}&date=${date}`;
+  const url = `https://chl.ca/api/v1/games?league=${LEAGUE}&date=${date}`;
   const res = await fetch(url);
 
   if (!res.ok) {
