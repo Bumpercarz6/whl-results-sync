@@ -1,12 +1,14 @@
 {
   "name": "whl-results-sync",
   "version": "1.0.0",
-  "type": "module",
+  "private": true,
+  "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
+    "dotenv": "^16.4.5",
     "googleapis": "^137.1.0",
-    "node-fetch": "^2.6.7"
+    "node-fetch": "^2.7.0"
   }
 }
