@@ -20,7 +20,7 @@ const TEST_DATE = process.env.TEST_DATE || null;
  * DATE HELPERS
  *************************/
 function getRunDate() {
-  if (2026-02-10) {
+  if (TEST_DATE) {
     console.log("🧪 TEST MODE DATE:", TEST_DATE);
     return TEST_DATE;
   }
