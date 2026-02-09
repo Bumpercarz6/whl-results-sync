@@ -45,7 +45,11 @@ const sheets = google.sheets({ version: "v4", auth });
  *********************************/
 async function fetchWHLGames(date) {
   const url = `https://lscluster.hockeytech.com/feed/?feed=statviewfeed&view=schedule&date=${date}&league_id=1&key=public`;
-  const res = await fetch(url);
+  const res = await fetch(url, {
+  headers: {
+    "User-Agent": "Mozilla/5.0 (WHL Results Sync)",
+    "Accept": "application/json"
+  }
   const data = await res.json();
   return data?.schedule || [];
 }
