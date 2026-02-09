@@ -70,7 +70,7 @@ async function fetchWHLGames(date) {
  *********************************/
 async function run() {
   try {
-    const date = todayISO();
+    const date = TEST_DATE ?? todayISO();
     console.log("📅 Date:", date);
 
     const games = await fetchWHLGames(date);
