@@ -1,13 +1,12 @@
 {
-  "name": "pickem-bot",
+  "name": "whl-results-sync",
   "version": "1.0.0",
-  "main": "index.js",
+  "type": "module",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "discord.js": "^14.25.1",
-    "dotenv": "^17.2.4",
-    "googleapis": "^171.4.0"
+    "googleapis": "^137.1.0",
+    "node-fetch": "^2.6.7"
   }
 }
