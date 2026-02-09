@@ -1,6 +1,6 @@
 function getRunDate() {
   if (TEST_DATE) {
-    console.log("🧪 TEST MODE DATE:",2026-02-10);
+    console.log("🧪 TEST MODE DATE:", 2026-02-10);
     return TEST_DATE; // keep as string YYYY-MM-DD
   }
 
