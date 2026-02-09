@@ -1,8 +1,16 @@
-// 🔧 TEST MODE (leave null for real runs)
-const TEST_DATE = 2026-02-10;
-// Example test dates:
-// const TEST_DATE = "2026-02-10";
-// const TEST_DATE = "2026-02-07";
+function getRunDate() {
+  if (TEST_DATE) {
+    console.log("🧪 TEST MODE DATE:",2026-02-10);
+    return TEST_DATE; // keep as string YYYY-MM-DD
+  }
+
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+
+  return `${yyyy}-${mm}-${dd}`;
+}
 
 /*********************************
  * WHL RESULTS SYNC (SCHEDULE + FINAL)
