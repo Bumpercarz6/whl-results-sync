@@ -1,3 +1,9 @@
+// 🔧 TEST MODE (leave null for real runs)
+const TEST_DATE = null;
+// Example test dates:
+// const TEST_DATE = "2026-02-10";
+// const TEST_DATE = "2026-02-07";
+
 /*********************************
  * WHL RESULTS SYNC (SCHEDULE + FINAL)
  *********************************/
