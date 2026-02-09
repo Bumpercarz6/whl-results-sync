@@ -1,6 +1,5 @@
 /*************************
  * WHL RESULTS SYNC
- * Safe, Cron-Friendly
  *************************/
 
 require("dotenv").config();
@@ -13,11 +12,12 @@ const { google } = require("googleapis");
 const SHEET_NAME = "Results";
 const TIMEZONE = "America/Edmonton";
 
-// OPTIONAL test date: YYYY-MM-DD
+// Optional test date (YYYY-MM-DD)
+// Leave empty in production
 const TEST_DATE = process.env.TEST_DATE || null;
 
 /*************************
- * DATE HELPERS
+ * DATE HANDLING
  *************************/
 function getRunDate() {
   if (TEST_DATE) {
@@ -50,24 +50,28 @@ const sheets = google.sheets({ version: "v4", auth });
  *************************/
 async function fetchWHLGames(date) {
   const url =
-    `https://lscluster.hockeytech.com/feed/?feed=statviewfeed` +
-    `&view=schedule&date=${date}&league_id=1&key=public`;
+    `https://lscluster.hockeytech.com/feed/` +
+    `?feed=statviewfeed` +
+    `&view=scoreboard` +
+    `&season=2025` +
+    `&date=${date}` +
+    `&league_id=1` +
+    `&key=public`;
 
   const res = await fetch(url);
   const text = await res.text();
 
-  // WHL sometimes returns HTML instead of JSON
+  // Guard: must be JSON
   if (!text.trim().startsWith("{")) {
-    console.error("❌ Non-JSON response from WHL");
-    return [];
+    throw new Error("Non-JSON response from WHL");
   }
 
-  const data = JSON.parse(text);
-  return data?.schedule ?? [];
+  const json = JSON.parse(text);
+  return json?.scoreboard?.games || [];
 }
 
 /*************************
- * MAIN RUN
+ * MAIN
  *************************/
 async function run() {
   try {
@@ -78,23 +82,32 @@ async function run() {
 
     if (!games.length) {
       console.log("ℹ️ No games found");
-      process.exit(0);
+      return;
     }
 
     const rows = games.map(g => {
       const home = g.home_team_name;
       const away = g.visiting_team_name;
-      const homeScore = g.home_goal_count ?? "";
-      const awayScore = g.visiting_goal_count ?? "";
+
+      const homeScore = Number(g.home_goal_count || 0);
+      const awayScore = Number(g.visiting_goal_count || 0);
 
       let status = "Scheduled";
+
       if (g.game_status === "Final") {
-        if (g.game_decided_in === "OT") status = "Final (OT)";
-        else if (g.game_decided_in === "SO") status = "Final (SO)";
-        else status = "Final";
+        status = "Final";
+        if (g.overtime === "1") status = "OT";
+        if (g.shootout === "1") status = "SO";
       }
 
-      return [date, away, home, awayScore, homeScore, status];
+      return [
+        date,
+        home,
+        away,
+        homeScore,
+        awayScore,
+        status
+      ];
     });
 
     await sheets.spreadsheets.values.append({
@@ -105,11 +118,12 @@ async function run() {
     });
 
     console.log(`✅ ${rows.length} games written`);
-    process.exit(0);
 
   } catch (err) {
-    console.error("❌ Sync failed:", err);
-    process.exit(1);
+    console.error("❌ Sync failed:", err.message);
+  } finally {
+    console.log("🏁 Finished – exiting");
+    process.exit(0);
   }
 }
 
