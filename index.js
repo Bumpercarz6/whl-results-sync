@@ -1,147 +1,141 @@
-/********************
- * REQUIREMENTS
- ********************/
-require("dotenv").config();
-const { Client, GatewayIntentBits } = require("discord.js");
-const { google } = require("googleapis");
+/*********************************
+ * WHL RESULTS SYNC (SAFE PROJECT)
+ *********************************/
+import fetch from "node-fetch";
+import { google } from "googleapis";
 
-/********************
- * DISCORD CLIENT
- ********************/
-const client = new Client({
-  intents: [GatewayIntentBits.Guilds]
-});
+/*********************************
+ * CONFIG
+ *********************************/
+const SHEET_NAME = "Results";
+const TIMEZONE = "America/Edmonton";
 
-/********************
+/*********************************
+ * DATE HELPERS
+ *********************************/
+function todayISO() {
+  return new Date().toLocaleDateString("en-CA", { timeZone: TIMEZONE });
+}
+
+function nowMountainHour() {
+  return Number(
+    new Date().toLocaleString("en-US", {
+      timeZone: TIMEZONE,
+      hour: "numeric",
+      hour12: false
+    })
+  );
+}
+
+/*********************************
  * GOOGLE AUTH
- ********************/
+ *********************************/
 const auth = new google.auth.GoogleAuth({
-  keyFile: "credentials.json",
+  credentials: {
+    client_email: process.env.GOOGLE_CLIENT_EMAIL,
+    private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, "\n")
+  },
   scopes: ["https://www.googleapis.com/auth/spreadsheets"]
 });
 
 const sheets = google.sheets({ version: "v4", auth });
 
-/********************
- * CONFIG — YOU MUST EDIT THESE
- ********************/
+/*********************************
+ * FETCH WHL GAMES
+ *********************************/
+async function fetchWHLGames(date) {
+  const url = `https://lscluster.hockeytech.com/feed/?feed=statviewfeed&view=schedule&date=${date}&league_id=1&key=public`;
+  const res = await fetch(url);
+  const data = await res.json();
+  return data?.schedule || [];
+}
 
-// 🔴 GOOGLE SHEET ID (from the URL)
-const SPREADSHEET_ID = "1Z-odT9UxUyc11bWDYehgKTthxdOD_VHGoQ_2A8nc3FE";
+/*********************************
+ * LOAD EXISTING RESULTS
+ *********************************/
+async function loadExistingRows() {
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: process.env.SPREADSHEET_ID,
+    range: `${SHEET_NAME}!A2:F`
+  });
 
-// 🔴 SHEET NAMES (must match exactly)
-const PICKS_SHEET = "Picks";
-const USERS_SHEET = "Users";
-const META_SHEET = "Meta";
+  return res.data.values || [];
+}
 
-// 🔴 DISCORD SERVER (GUILD) ID
-const GUILD_ID = "1418861060294705154";
+/*********************************
+ * WRITE RESULTS
+ *********************************/
+async function writeRows(rows) {
+  if (!rows.length) return;
 
-/********************
- * READY — REGISTER SLASH COMMAND
- ********************/
-client.once("ready", async () => {
-  console.log(`✅ Logged in as ${client.user.tag}`);
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: process.env.SPREADSHEET_ID,
+    range: `${SHEET_NAME}!A2`,
+    valueInputOption: "RAW",
+    requestBody: { values: rows }
+  });
+}
 
-  await client.application.commands.create(
-    {
-      name: "pick",
-      description: "Submit your picks",
-      options: [
-        {
-          name: "picks",
-          description: "One team per line or comma separated",
-          type: 3,
-          required: true
-        }
-      ]
-    },
-    GUILD_ID
+/*********************************
+ * MAIN LOGIC
+ *********************************/
+async function run() {
+  const date = todayISO();
+  const hour = nowMountainHour();
+
+  console.log("📅 Date:", date);
+  console.log("⏰ Mountain Hour:", hour);
+
+  const games = await fetchWHLGames(date);
+  if (!games.length) {
+    console.log("ℹ️ No games today");
+    return;
+  }
+
+  const existing = await loadExistingRows();
+  const existingKeys = new Set(
+    existing.map(r => `${r[0]}|${r[1]}|${r[2]}`)
   );
 
-  console.log("✅ /pick command registered");
-});
+  const rowsToInsert = [];
 
-/********************
- * PICK HANDLER
- ********************/
-client.on("interactionCreate", async interaction => {
-  if (!interaction.isChatInputCommand()) return;
-  if (interaction.commandName !== "pick") return;
+  for (const g of games) {
+    const home = g.home_team_name;
+    const away = g.visiting_team_name;
+    const key = `${date}|${home}|${away}`;
 
-  await interaction.deferReply({ ephemeral: true });
+    if (existingKeys.has(key)) continue;
 
-  try {
-    /***** PARSE PICKS *****/
-    const rawPicks = interaction.options.getString("picks");
-    const picks = rawPicks
-      .split(/,|\n/)
-      .map(p => p.trim())
-      .filter(Boolean);
+    let status = "Scheduled";
+    let homeScore = "";
+    let awayScore = "";
 
-    /***** READ META SHEET *****/
-    const metaRes = await sheets.spreadsheets.values.get({
-      spreadsheetId: SPREADSHEET_ID,
-      range: `${META_SHEET}!A:B`
-    });
-
-    const meta = Object.fromEntries(metaRes.data.values || []);
-    const startRow = Number(meta.start_row);
-    const gamesToday = Number(meta.games_today);
-
-    if (!startRow || !gamesToday) {
-      await interaction.editReply("❌ Meta sheet missing start_row or games_today.");
-      return;
+    if (g.game_status === "Final") {
+      homeScore = g.home_goal_count;
+      awayScore = g.visiting_goal_count;
+      status = g.overtime === "1" ? "OT" : g.shootout === "1" ? "SO" : "Final";
     }
 
-    if (picks.length !== gamesToday) {
-      await interaction.editReply(
-        `❌ You must submit exactly ${gamesToday} picks. You submitted ${picks.length}.`
-      );
-      return;
-    }
-
-    /***** FIND USER COLUMN *****/
-    const usersRes = await sheets.spreadsheets.values.get({
-      spreadsheetId: SPREADSHEET_ID,
-      range: `${USERS_SHEET}!A:B`
-    });
-
-    const users = usersRes.data.values || [];
-    const userRow = users.find(r => r[0] === interaction.user.id);
-
-    if (!userRow) {
-      await interaction.editReply("❌ You are not registered in the Users sheet.");
-      return;
-    }
-
-    const columnLetter = userRow[1];
-
-    /***** WRITE PICKS (ONE CELL AT A TIME — BULLETPROOF) *****/
-    let row = startRow;
-
-    for (const pick of picks) {
-      await sheets.spreadsheets.values.update({
-        spreadsheetId: SPREADSHEET_ID,
-        range: `${PICKS_SHEET}!${columnLetter}${row}`,
-        valueInputOption: "RAW",
-        requestBody: {
-          values: [[pick]]
-        }
-      });
-
-      row++;
-    }
-
-    await interaction.editReply("✅ Picks submitted successfully!");
-
-  } catch (err) {
-    console.error(err);
-    await interaction.editReply("❌ Error writing picks.");
+    rowsToInsert.push([
+      date,
+      home,
+      away,
+      homeScore,
+      awayScore,
+      status
+    ]);
   }
-});
 
-/********************
- * LOGIN
- ********************/
-client.login(process.env.BOT_TOKEN);
+  await writeRows(rowsToInsert);
+  console.log(`✅ Inserted ${rowsToInsert.length} rows`);
+}
+
+/*********************************
+ * RUN
+ *********************************/
+run()
+  .then(() => console.log("🏁 Sync complete"))
+  .catch(err => {
+    console.error("❌ Sync error:", err);
+    process.exit(1);
+  });
