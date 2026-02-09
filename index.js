@@ -49,17 +49,24 @@ const sheets = google.sheets({ version: "v4", auth });
  ************************************/
 async function fetchWHLGames(date) {
   const url =
-    `https://lscluster.hockeytech.com/feed/?feed=statviewfeed&view=schedule&date=${date}&league_id=1&key=public`;
+    `https://lscluster.hockeytech.com/feed/?feed=schedule&league_id=1&key=public&date=${date}`;
 
-  const res = await fetch(url);
+  const res = await fetch(url, {
+    headers: {
+      "User-Agent": "Mozilla/5.0",
+      "Accept": "application/json",
+    },
+  });
+
   const text = await res.text();
 
   if (!text.trim().startsWith("{")) {
+    console.error("❌ RAW RESPONSE:", text.slice(0, 200));
     throw new Error("Non-JSON response from WHL");
   }
 
   const json = JSON.parse(text);
-  return json?.schedule || [];
+  return json?.games || [];
 }
 
 /************************************
